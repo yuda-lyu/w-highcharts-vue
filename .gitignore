@@ -1,0 +1,12 @@
+node_modules
+.agents
+AGENTS.md
+.env
+.opencode
+.claude
+CLAUDE.md
+test-action
+test-screenshot
+test-html
+user_data
+tmp
