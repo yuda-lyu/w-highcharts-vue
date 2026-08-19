@@ -20,6 +20,7 @@
 
             <div class="bk">
                 <demolink
+                    :pkgname="'w-highcharts-vue'"
                     :kbname="'w-highstock-vue'"
                     :casename="'line'"
                 ></demolink>
@@ -34,6 +35,7 @@
 
             <div class="bk">
                 <demolink
+                    :pkgname="'w-highcharts-vue'"
                     :kbname="'w-highstock-vue'"
                     :casename="'area'"
                 ></demolink>
@@ -53,7 +55,7 @@
 </template>
 
 <script>
-import demolink from './components/demolink.vue'
+import demolink from 'w-component-vue/src/components/demolink.vue'
 import WHighstockVue from './components/WHighstockVue.vue'
 
 

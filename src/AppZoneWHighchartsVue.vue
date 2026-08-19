@@ -20,6 +20,7 @@
 
             <div class="bk">
                 <demolink
+                    :pkgname="'w-highcharts-vue'"
                     :kbname="'w-highcharts-vue'"
                     :casename="'line'"
                 ></demolink>
@@ -34,6 +35,7 @@
 
             <div class="bk">
                 <demolink
+                    :pkgname="'w-highcharts-vue'"
                     :kbname="'w-highcharts-vue'"
                     :casename="'area'"
                 ></demolink>
@@ -48,6 +50,7 @@
 
             <div class="bk">
                 <demolink
+                    :pkgname="'w-highcharts-vue'"
                     :kbname="'w-highcharts-vue'"
                     :casename="'bar'"
                 ></demolink>
@@ -62,6 +65,7 @@
 
             <div class="bk">
                 <demolink
+                    :pkgname="'w-highcharts-vue'"
                     :kbname="'w-highcharts-vue'"
                     :casename="'pie'"
                 ></demolink>
@@ -76,6 +80,7 @@
 
             <div class="bk">
                 <demolink
+                    :pkgname="'w-highcharts-vue'"
                     :kbname="'w-highcharts-vue'"
                     :casename="'heatmap'"
                 ></demolink>
@@ -90,6 +95,7 @@
 
             <div class="bk">
                 <demolink
+                    :pkgname="'w-highcharts-vue'"
                     :kbname="'w-highcharts-vue'"
                     :casename="'large heatmap'"
                 ></demolink>
@@ -109,7 +115,7 @@
 </template>
 
 <script>
-import demolink from './components/demolink.vue'
+import demolink from 'w-component-vue/src/components/demolink.vue'
 import WHighchartsVue from './components/WHighchartsVue.vue'
 
 
