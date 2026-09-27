@@ -29,7 +29,7 @@
 <nav >
     
     
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-WHighchartsVue.html">WHighchartsVue</a></li><li><a href="module-WHighstockVue.html">WHighstockVue</a></li></ul><h3>Global</h3><ul><li><a href="global.html#iniHighcharts">iniHighcharts</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-WHighchartsVue.html">WHighchartsVue</a></li><li><a href="module-WHighstockVue.html">WHighstockVue</a></li></ul><h3>Global</h3><ul><li><a href="global.html#cloneOptNoReflow">cloneOptNoReflow</a></li><li><a href="global.html#genComponent">genComponent</a></li><li><a href="global.html#getChartOptInfo">getChartOptInfo</a></li><li><a href="global.html#getContainerSize">getContainerSize</a></li><li><a href="global.html#iniHighcharts">iniHighcharts</a></li><li><a href="global.html#isPropUnchanged">isPropUnchanged</a></li></ul>
     
 </nav>
 
@@ -124,6 +124,729 @@
 
     
         <h3 class="subsection-title">Methods</h3>
+
+        
+            
+
+    
+
+    <h4 class="name" id="cloneOptNoReflow"><span class="type-signature"></span>cloneOptNoReflow<span class="signature">(options<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Object}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>深層複製Highcharts設定物件並關閉其內建reflow</p>
+<p>傳入Highcharts者須為複本, 避免Vue響應式物件與Highcharts內部共用參照; 函數(例如formatter、events)保留原參照
+容器尺寸同步改由組件以w-component-vue之v-domresize(wsemi domDetect)處理, 故關閉Highcharts內建reflow(其以ResizeObserver觸發並防抖100ms)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="cloneOptNoReflow.mjs.html">cloneOptNoReflow.mjs</a>, <a href="cloneOptNoReflow.mjs.html#line22">line 22</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-examples">Example</h5>
+    
+    <pre class="prettyprint"><code>let o = { chart: { type: 'line' } }
+let r = cloneOptNoReflow(o)
+console.log(r.chart)
+// => { type: 'line', reflow: false }
+console.log(o.chart)
+// => { type: 'line' }</code></pre>
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>options</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>{}</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入Highcharts設定物件，預設{}</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳複製後之設定物件，其chart.reflow為false</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="genComponent"><span class="type-signature"></span>genComponent<span class="signature">(name, Highcharts)</span><span class="type-signature"> &rarr; {Object}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>產生Highcharts繪圖組件(Vue2)，取代vue-highcharts之genComponent</p>
+<p>vue-highcharts於options任一變更(含模板物件字面值每次重繪、資料點異動)皆重建整張圖，致圖例隱藏等使用者狀態遺失，且Highcharts每建一圖即新增一個不解除之ResizeObserver而隨更新累積；
+本組件掛載時建立一次圖表，options變更以chart.update就地更新(內容相同之新物件不更新)，銷毀時destroy</p>
+<p>容器尺寸同步：以w-component-vue之v-domresize(wsemi domDetect，ResizeObserver，並處理元素消失與重建)偵測，以與Highcharts相同之方式量測容器並與圖表目前尺寸比較，不一致時於繪製前同步圖表尺寸，取代Highcharts內建reflow(防抖100ms，連續拖拉時不跟隨)；
+容器隱藏(寬或高為0)或尺寸與圖表一致時不重繪，options.chart.reflow給false則不同步，options.chart.width、height有給者該維度固定</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="genComponent.mjs.html">genComponent.mjs</a>, <a href="genComponent.mjs.html#line30">line 30</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>name</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>輸入組件名稱字串，可為'Highcharts'、'Highstock'、'Highmaps'、'HighchartsGantt'</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>Highcharts</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>輸入Highcharts物件，須已掛載對應模組(例如stock)</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳Vue組件物件，圖表實例掛於組件之chart屬性</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="getChartOptInfo"><span class="type-signature"></span>getChartOptInfo<span class="signature">(options<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Object}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>由Highcharts設定物件取得尺寸同步所需資訊</p>
+<p>reflow: options.chart.reflow給false時為false(使用者不要隨容器同步尺寸)，否則為true
+fixedWidth/fixedHeight: options.chart.width/height有給(非null、非undefined)時為true，Highcharts此時不使用容器該維度之尺寸
+heightByWidth: options.chart.height為百分比字串(例如'60%')時為true，高度隨寬度變化</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="getChartOptInfo.mjs.html">getChartOptInfo.mjs</a>, <a href="getChartOptInfo.mjs.html#line20">line 20</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-examples">Example</h5>
+    
+    <pre class="prettyprint"><code>console.log(getChartOptInfo({ chart: { height: '60%' } }))
+// => { reflow: true, fixedWidth: false, fixedHeight: true, heightByWidth: true }</code></pre>
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>options</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>{}</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>輸入Highcharts設定物件，預設{}</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳物件{reflow,fixedWidth,fixedHeight,heightByWidth}</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="getContainerSize"><span class="type-signature"></span>getContainerSize<span class="signature">(el)</span><span class="type-signature"> &rarr; {Object}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>取得圖表容器可用尺寸，量測方式與Highcharts之Utilities.getStyle(寬高)相同，供v-domresize之getSize與圖表chartWidth、chartHeight比較</p>
+<p>寬: offsetWidth與scrollWidth取小者，若boundingClientRect寬度介於其與其減1之間則取整(小數寬度)，再扣除左右padding
+高: offsetHeight與scrollHeight取小者，再扣除上下padding</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="getContainerSize.mjs.html">getContainerSize.mjs</a>, <a href="getContainerSize.mjs.html#line10">line 10</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>el</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">HTMLElement</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>輸入容器元素</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳物件{width,height}，單位px</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
 
         
             
@@ -235,6 +958,200 @@
 
 
         
+            
+
+    
+
+    <h4 class="name" id="isPropUnchanged"><span class="type-signature"></span>isPropUnchanged<span class="signature">(nv, ov)</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>判斷prop新舊值是否視為未變更，供watcher略過無實質變化之觸發</p>
+<p>父組件於模板以物件字面值傳入prop時(例如:options=&quot;{ series: [...] }&quot;)，每次重繪皆產生新物件(參照不同)，故內容相同時視為未變更；
+新舊值為同一物件時，代表由deep watcher偵測到物件內部異動(例如push資料點)，視為已變更</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="isPropUnchanged.mjs.html">isPropUnchanged.mjs</a>, <a href="isPropUnchanged.mjs.html#line24">line 24</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-examples">Example</h5>
+    
+    <pre class="prettyprint"><code>console.log(isPropUnchanged({ title: { text: 'a' } }, { title: { text: 'a' } }))
+// => true
+
+let o = { title: { text: 'a' } }
+console.log(isPropUnchanged(o, o))
+// => false</code></pre>
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>nv</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">*</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>輸入新值</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>ov</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">*</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>輸入舊值</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳是否視為未變更布林值</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Boolean</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
     
 
     
@@ -254,7 +1171,7 @@
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Sep 22 2026 22:04:48 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Sep 27 2026 15:17:02 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>

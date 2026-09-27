@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>genComponent.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-WHighchartsVue.html">WHighchartsVue</a></li><li><a href="module-WHighstockVue.html">WHighstockVue</a></li></ul><h3>Global</h3><ul><li><a href="global.html#cloneOptNoReflow">cloneOptNoReflow</a></li><li><a href="global.html#genComponent">genComponent</a></li><li><a href="global.html#getChartOptInfo">getChartOptInfo</a></li><li><a href="global.html#getContainerSize">getContainerSize</a></li><li><a href="global.html#iniHighcharts">iniHighcharts</a></li><li><a href="global.html#isPropUnchanged">isPropUnchanged</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">genComponent.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import domResize from 'w-component-vue/src/js/domResize.mjs'
+import isPropUnchanged from './isPropUnchanged.mjs'
+import getChartOptInfo from './getChartOptInfo.mjs'
+import cloneOptNoReflow from './cloneOptNoReflow.mjs'
+import getContainerSize from './getContainerSize.mjs'
+
+
+//ctors, 組件名稱對應之Highcharts建構函數名稱
+let ctors = {
+    Highcharts: 'chart',
+    Highstock: 'stockChart',
+    Highmaps: 'mapChart',
+    HighchartsGantt: 'ganttChart',
+}
+
+
+/**
+ * 產生Highcharts繪圖組件(Vue2)，取代vue-highcharts之genComponent
+ *
+ * vue-highcharts於options任一變更(含模板物件字面值每次重繪、資料點異動)皆重建整張圖，致圖例隱藏等使用者狀態遺失，且Highcharts每建一圖即新增一個不解除之ResizeObserver而隨更新累積；
+ * 本組件掛載時建立一次圖表，options變更以chart.update就地更新(內容相同之新物件不更新)，銷毀時destroy
+ *
+ * 容器尺寸同步：以w-component-vue之v-domresize(wsemi domDetect，ResizeObserver，並處理元素消失與重建)偵測，以與Highcharts相同之方式量測容器並與圖表目前尺寸比較，不一致時於繪製前同步圖表尺寸，取代Highcharts內建reflow(防抖100ms，連續拖拉時不跟隨)；
+ * 容器隱藏(寬或高為0)或尺寸與圖表一致時不重繪，options.chart.reflow給false則不同步，options.chart.width、height有給者該維度固定
+ *
+ * @param {String} name 輸入組件名稱字串，可為'Highcharts'、'Highstock'、'Highmaps'、'HighchartsGantt'
+ * @param {Object} Highcharts 輸入Highcharts物件，須已掛載對應模組(例如stock)
+ * @returns {Object} 回傳Vue組件物件，圖表實例掛於組件之chart屬性
+ */
+function genComponent(name, Highcharts) {
+
+    //ctor
+    let ctor = Highcharts[ctors[name]]
+    if (!ctor) {
+        //無對應建構函數(例如未掛載模組或於伺服器端)時回傳最小組件
+        return {
+            render: function(h) {
+                return h('div')
+            },
+        }
+    }
+
+    return {
+        name,
+        directives: {
+            domresize: domResize(),
+        },
+        props: {
+            options: {
+                type: Object,
+                default: () => ({}),
+            },
+        },
+        data: function() {
+            //resizeOpt為v-domresize之設定, 圖表建立後給予, reflow給false時為false(不建立偵測器)
+            return {
+                resizeOpt: false,
+            }
+        },
+        render: function(h) {
+            return h('div', {
+                directives: [{ name: 'domresize', value: this.resizeOpt }],
+                on: { domresize: this.onDomResize },
+            })
+        },
+        mounted: function() {
+            this.init()
+        },
+        beforeDestroy: function() {
+            this.clear()
+        },
+        watch: {
+            options: {
+                deep: true,
+                handler: function(nv, ov) {
+                    let vo = this
+
+                    //模板物件字面值每次重繪皆為新物件, 內容相同時不更新
+                    if (isPropUnchanged(nv, ov)) {
+                        return
+                    }
+
+                    //check
+                    if (!vo.chart) {
+                        return
+                    }
+
+                    //update, 就地更新以保留使用者互動狀態, oneToOne使series等依新設定增刪
+                    vo.chartInfo = getChartOptInfo(nv)
+                    vo.chart.update(cloneOptNoReflow(nv), true, true)
+
+                    //resizeOpt, 以新refreshKey更換使v-domresize重新比較(例如移除固定寬度), 恢復或停用reflow時隨之重建或解除偵測器
+                    vo.resizeOpt = vo.genResizeOpt()
+
+                },
+            },
+        },
+        methods: {
+
+            init: function() {
+                let vo = this
+
+                //chartInfo, chart, 掛this成非響應式屬性
+                vo.chartInfo = getChartOptInfo(vo.options)
+                vo.chart = ctor(vo.$el, cloneOptNoReflow(vo.options))
+
+                //resizeOpt
+                vo.resizeOpt = vo.genResizeOpt()
+
+            },
+
+            /**
+             * 產生v-domresize之設定, reflow給false時為false(內部使用)
+             *
+             * event為'resize'只聽容器尺寸; sync於ResizeObserver回呼內(繪製前)發出使圖表於同一幀重繪; tolerancePixel為0使1px之變化亦發出;
+             * throttle為100, 首次立即執行, 其後每100ms至多一次並保留最後一次; getSize以與Highcharts相同之方式量測容器; getBase為圖表目前尺寸, 故尺寸一致時不重繪;
+             * refreshKey每次產生皆不同, 故options更新後v-domresize即重新比較一次(v-domresize不於宿主重繪時自動重新比較)
+             */
+            genResizeOpt: function() {
+                let vo = this
+                if (!vo.chartInfo || !vo.chartInfo.reflow) {
+                    return false
+                }
+                vo.resizeSeq = (vo.resizeSeq || 0) + 1
+                return {
+                    event: 'resize',
+                    sync: true,
+                    tolerancePixel: 0,
+                    throttle: 100,
+                    getSize: getContainerSize,
+                    getBase: vo.getChartSize,
+                    refreshKey: vo.resizeSeq,
+                }
+            },
+
+            /**
+             * 取得圖表目前尺寸, 供v-domresize比較, options.chart.width、height有給之維度不隨容器變化故回傳null(不比較), 尚無圖表時回傳null(內部使用)
+             */
+            getChartSize: function() {
+                let vo = this
+                let chart = vo.chart
+                if (!chart || !vo.chartInfo) {
+                    return null
+                }
+                return {
+                    width: vo.chartInfo.fixedWidth ? null : chart.chartWidth,
+                    height: vo.chartInfo.fixedHeight ? null : chart.chartHeight,
+                }
+            },
+
+            /**
+             * 容器尺寸與圖表不一致時(由v-domresize判定)同步圖表尺寸(內部使用)
+             */
+            onDomResize: function() {
+                let vo = this
+
+                //check
+                let chart = vo.chart
+                if (!chart) {
+                    return
+                }
+
+                //heightByWidth, 高度依寬度比例時, 重繪會使高度由內容決定之容器於ResizeObserver回呼內再變而觸發loop錯誤, 故延至下一幀
+                if (vo.chartInfo.heightByWidth) {
+                    if (!vo.sizeFrame) {
+                        vo.sizeFrame = window.requestAnimationFrame(() => {
+                            vo.sizeFrame = null
+                            if (vo.chart) {
+                                vo.chart.setSize(undefined, undefined, false)
+                            }
+                        })
+                    }
+                    return
+                }
+
+                //setSize, 同Highcharts內建reflow之呼叫, 寬高依容器重算且不做動畫
+                chart.setSize(undefined, undefined, false)
+
+            },
+
+            clear: function() {
+                let vo = this
+
+                //sizeFrame
+                if (vo.sizeFrame) {
+                    window.cancelAnimationFrame(vo.sizeFrame)
+                    vo.sizeFrame = null
+                }
+
+                //chart, 容器尺寸監聽由v-domresize隨組件解除
+                if (vo.chart) {
+                    vo.chart.destroy()
+                    vo.chart = null
+                }
+
+            },
+
+        },
+    }
+}
+
+
+export default genComponent
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Sep 27 2026 15:17:02 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>
