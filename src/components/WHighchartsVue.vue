@@ -4,19 +4,19 @@
 </template>
 
 <script>
-import { genComponent } from 'vue-highcharts'
 import iniHighcharts from '../js/iniHighcharts.mjs'
+import genComponent from '../js/genComponent.mjs'
 
 
 //Highcharts, 直接引用highcharts不使用cdn
 let Highcharts = iniHighcharts()
 
-//cmpHighcharts, 由vue-highcharts產生Highcharts繪圖組件
+//cmpHighcharts, 產生Highcharts繪圖組件(取代vue-highcharts, 見genComponent說明)
 let cmpHighcharts = genComponent('Highcharts', Highcharts)
 
 
 /**
- * @vue-prop {Object} [options={}] 輸入highcharts設定物件，預設{}
+ * @vue-prop {Object} [options={}] 輸入highcharts設定物件，變更時以chart.update就地更新(保留圖例顯隱、縮放等使用者狀態)，內容相同之新物件(例如模板物件字面值於每次重繪產生者)不視為變更；容器尺寸改變時自動同步圖表尺寸(容器隱藏時不同步)，options.chart.reflow給false則不同步，options.chart.width、height有給者該維度固定，預設{}
  */
 export default {
     components: {
@@ -25,7 +25,7 @@ export default {
     props: {
         options: {
             type: Object,
-            default: () => {},
+            default: () => ({}),
         },
     },
     data: function() {

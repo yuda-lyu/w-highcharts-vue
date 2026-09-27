@@ -28,7 +28,7 @@ function iniHighcharts() {
 
     //modules, highcharts@11各模組為工廠函數, 須傳入Highcharts才會掛載
     HighchartsMore(Highcharts)
-    ModuleStock(Highcharts) //因vue-highcharts需有stock才能產生Highstock組件, 故WHighchartsVue亦須先載入stock
+    ModuleStock(Highcharts) //WHighstockVue之繪圖組件須以Highcharts.stockChart建立(見genComponent), 且兩組件共用本初始化, 故一併載入stock
     ModuleAnnotations(Highcharts)
     ModuleHeatmap(Highcharts)
     ModuleBoost(Highcharts)
