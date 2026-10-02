@@ -1,12 +1,12 @@
 {
   "name": "w-highcharts-vue",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "main": "dist/w-highcharts-vue.umd.js",
   "dependencies": {
     "highcharts": "^11.4.8",
-    "w-component-vue": "^2.5.23",
-    "w-highcharts": "^1.0.23",
-    "wsemi": "^1.9.7"
+    "w-component-vue": "^2.5.26",
+    "w-highcharts": "^1.0.24",
+    "wsemi": "^1.9.9"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "^5.0.8",
