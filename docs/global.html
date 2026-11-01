@@ -29,7 +29,7 @@
 <nav >
     
     
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-WHighchartsVue.html">WHighchartsVue</a></li><li><a href="module-WHighstockVue.html">WHighstockVue</a></li></ul><h3>Global</h3><ul><li><a href="global.html#cloneOptNoReflow">cloneOptNoReflow</a></li><li><a href="global.html#genComponent">genComponent</a></li><li><a href="global.html#getChartOptInfo">getChartOptInfo</a></li><li><a href="global.html#getContainerSize">getContainerSize</a></li><li><a href="global.html#iniHighcharts">iniHighcharts</a></li><li><a href="global.html#isPropUnchanged">isPropUnchanged</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-WHighchartsVue.html">WHighchartsVue</a></li><li><a href="module-WHighstockVue.html">WHighstockVue</a></li></ul><h3>Global</h3><ul><li><a href="global.html#cloneOptNoReflow">cloneOptNoReflow</a></li><li><a href="global.html#genComponent">genComponent</a></li><li><a href="global.html#getChartOptInfo">getChartOptInfo</a></li><li><a href="global.html#getContainerSize">getContainerSize</a></li><li><a href="global.html#getUpdateMode">getUpdateMode</a></li><li><a href="global.html#iniHighcharts">iniHighcharts</a></li><li><a href="global.html#isPropUnchanged">isPropUnchanged</a></li><li><a href="global.html#trackResizeObserver">trackResizeObserver</a></li></ul>
     
 </nav>
 
@@ -331,8 +331,35 @@ console.log(o.chart)
     
     <dt class="tag-description">Description:</dt>
     <dd class="tag-description"><ul class="dummy"><li><p>產生Highcharts繪圖組件(Vue2)，取代vue-highcharts之genComponent</p>
-<p>vue-highcharts於options任一變更(含模板物件字面值每次重繪、資料點異動)皆重建整張圖，致圖例隱藏等使用者狀態遺失，且Highcharts每建一圖即新增一個不解除之ResizeObserver而隨更新累積；
-本組件掛載時建立一次圖表，options變更以chart.update就地更新(內容相同之新物件不更新)，銷毀時destroy</p>
+<p>options變更時之更新方式由prop updateMode決定：
+'rebuild'(預設)：options變更即銷毀並重建整張圖(同vue-highcharts與本套件1.0.18之行為)，同一份設定恆畫出同一張圖，不受先前設定與使用者操作影響；縮放、導覽列範圍、圖例顯隱、點選取、tooltip等互動狀態隨之重置；
+'update'：以chart.update(options, true, true)就地更新，保留縮放、導覽列範圍、圖例隱藏，但Highcharts之update與新建並不等價，結果可能與新建不同(見下列〈chart.update之已知狀況與問題〉)，不保證等同重建；
+兩種模式皆為：內容相同之新物件(例如模板物件字面值於每次重繪產生者)不視為變更；掛載時建立圖表，銷毀時destroy</p>
+<p>為何預設重建(1.0.23~1.0.29曾改為預設就地更新，其後恢復)：
+就地更新使「同一份設定畫出之圖」隨圖先前之設定與操作而異，下游e2e標準圖與規格(同設定同圖)因此失效(Gitea #33)；其中一類差異(下列第2點)出自Highcharts自身，無任何選項層之補丁能消除，只有重建能與新建等同；
+重建亦不慢於就地更新(實測5系列×2000點，Highcharts每次約26ms對45ms)；就地更新所保留之互動狀態僅縮放、導覽列範圍、圖例隱藏三類，點選取與tooltip懸停反正不保留；
+需保留該三類互動狀態者(例如資料持續推播而使用者正在檢視縮放範圍)可自行給updateMode為'update'，並自行承擔下列差異</p>
+<p>〈chart.update之已知狀況與問題〉(Highcharts 11.4.8實測；行號為node_modules/highcharts/highstock.src.js，核心區段與highcharts.src.js相同；重現證據見sgud/exp/experience.md)：</p>
+<ol>
+<li>合併而非取代：Chart.update先diffObjects(新設定, chart.options)(:37593)，再merge進userOptions(:37594)，軸為Axis.update之merge(this.userOptions, options)(:21392，原碼JSDoc :21373-21374明寫only new or altered options need to be specified)；
+新設定省略之鍵(min、max、tickInterval、tickAmount、softMax、marginLeft、plotLines…)沿用舊值，只有顯式undefined可覆寫(:412-414)，預設值非undefined之鍵(例如lineWidth)連此法也無法還原；
+後果：設定A有yAxis.max為3、設定B省略，更新後軸上限仍為3(w-geo-vue切換參數時同一圖元件被餵入不同設定即屬此類)；官方issue #14969亦答覆不合併之更新唯一做法是重建</li>
+<li>刻度間隔可能與新建不同：新建由Chart.render(:36979-37054)以扣除x軸標籤預留空間後之縮減軸長首算刻度，更新由Chart.redraw(:35779、setScale :35848-35851)以保留之最終軸長(len屬Axis.keepProps，:21472-21481)計算；
+與設定內容無關，連只改系列名稱或只改資料都可能發生，此為Highcharts自身之update與new不等價，無選項層修法；後果：同設定同尺寸下y軸刻度間隔與範圍不同(實測±200/間距100對±150/間距50)</li>
+<li>Axis.keepProps殘留使用者範圍：userMin、userMax、len等於更新後保留(:21472-21481)，且hardMin = pick(axis.userMin, options.min)(:19520)使userMin優先於新設定之min；Highstock之navigator於資料更新時亦會寫入baseXAxis.userMin/userMax(:50014-50018)；
+後果：使用者縮放過後，新設定明確給的xAxis.min、max仍被舊縮放範圍蓋過</li>
+<li>Highstock開navigator時強制之startOnTick、endOnTick為false(getForcedAxisOptions :53535-53551)及Stock預設值(:53596-53630)只在建圖(StockChart.init :53640)與createAxis(:53660)時套用，更新不重套；
+使用端設定帶startOnTick為true者，因diffObjects把true與chart.options內被強制之false視為變更而套用true，第一次更新(即使只差資料)即失效；後果：拖導覽列把手與滾輪縮放之起迄被捨入至刻度，不能選取精確時間</li>
+<li>navigator、scrollbar開關切換：Navigator.update(:49042-49053)關閉時不移除chart.navigator與chart.scrollbar，其getMargins監聽(:50097-50108)恆加navigator.margin(25)，繪圖區變矮、刻度改變；
+無navigator建圖後更新為啟用則chart.navigator為null，導覽列根本不出現(marginBottom卻已加大)</li>
+<li>格線群組排到圖框之後：Axis.update銷毀並重建格線群組(:21223-21230、:20722-20736)，zIndex(皆為1)相同時插在既有元素之後(:11056-11064)，圖框於drawChartBox(:36846-36853)以zIndex為1建立，新建時先於格線群組；
+每一次chart.update皆發生，與設定內容無關(含僅改資料)；後果：淡色格線蓋在plotBorderColor之圖框上，圖框上緣與右緣由深色變淺色</li>
+<li>互動狀態：保留縮放(含框選縮放與重設縮放按鈕)、navigator範圍、圖例隱藏；不保留點選取(allowPointSelect)，tooltip懸停之hoverPoint遺失而tooltip殘留舊內容
+另Series.update之preserve清單與keepPoints條件、系列型別切換、responsive.rules切換等亦各有update與new不等價之處，詳見sgud/exp/experience.md</li>
+</ol>
+<p>ResizeObserver：Highcharts每建一圖(onload的Chart.setReflow，:36551-36559、:37262)即無條件以全域ResizeObserver新增一個偵測容器之偵測器，無解除機制，不論chart.reflow是否為false；
+其回呼閉包持有圖物件，反覆重建時已destroy之圖殼物件隨次數累積(實測重建30次後存活Chart物件32個)；本組件以trackResizeObserver於建圖期間捕捉該偵測器，於下次重建前與組件銷毀時disconnect，存活圖物件不隨重建次數增長(捕捉後為2個)；
+本組件恆給chart.reflow為false並自行以v-domresize同步尺寸，故該偵測器之回呼本來就什麼都不做，disconnect不影響行為</p>
 <p>容器尺寸同步：以w-component-vue之v-domresize(wsemi domDetect，ResizeObserver，並處理元素消失與重建)偵測，以與Highcharts相同之方式量測容器並與圖表目前尺寸比較，不一致時於繪製前同步圖表尺寸，取代Highcharts內建reflow(防抖100ms，連續拖拉時不跟隨)；
 容器隱藏(寬或高為0)或尺寸與圖表一致時不重繪，options.chart.reflow給false則不同步，options.chart.width、height有給者該維度固定</p></li></ul></dd>
     
@@ -340,7 +367,7 @@ console.log(o.chart)
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="genComponent.mjs.html">genComponent.mjs</a>, <a href="genComponent.mjs.html#line30">line 30</a>
+        <a href="genComponent.mjs.html">genComponent.mjs</a>, <a href="genComponent.mjs.html#line60">line 60</a>
     </li></ul></dd>
     
 
@@ -853,6 +880,166 @@ heightByWidth: options.chart.height為百分比字串(例如'60%')時為true，�
 
     
 
+    <h4 class="name" id="getUpdateMode"><span class="type-signature"></span>getUpdateMode<span class="signature">(v)</span><span class="type-signature"> &rarr; {String}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>正規化updateMode(options變更時之更新方式)，內部使用</p>
+<p>'rebuild'(預設)為options變更即重建整張圖，同一份設定恆畫出同一張圖；'update'為以chart.update就地更新，保留縮放、導覽列範圍、圖例顯隱，但不保證等同重建(已知差異見genComponent說明)；
+非字串或未知字串(含大小寫不同、前後空白)皆視為未給，改用預設'rebuild'，不報錯</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="getUpdateMode.mjs.html">getUpdateMode.mjs</a>, <a href="getUpdateMode.mjs.html#line10">line 10</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>v</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">*</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>輸入updateMode，可為'rebuild'、'update'，其他值視為未給</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳'rebuild'或'update'</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">String</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
     <h4 class="name" id="iniHighcharts"><span class="type-signature"></span>iniHighcharts<span class="signature">()</span><span class="type-signature"> &rarr; {Object}</span></h4>
 
     
@@ -1152,6 +1339,193 @@ console.log(isPropUnchanged(o, o))
 
 
         
+            
+
+    
+
+    <h4 class="name" id="trackResizeObserver"><span class="type-signature"></span>trackResizeObserver<span class="signature">(fn, list)</span><span class="type-signature"> &rarr; {*}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>執行fn期間收集其中建立之ResizeObserver實例，內部使用</p>
+<p>Highcharts(11.4.8)每建一圖，onload時由Chart.setReflow無條件以全域ResizeObserver建立一個監聽容器之偵測器，且無任何解除機制(highstock.src.js:36551-36559、呼叫處:37262)，
+不論chart.reflow是否為false(本套件恆給false，該偵測器之回呼因此什麼都不做，純屬累積)；
+其回呼閉包持有該圖物件，故反覆重建時，已destroy之圖殼物件(Chart)隨次數累積無法回收(實測重建30次後存活Chart物件32個，捕捉並disconnect後為2個)；
+本函數於fn期間暫以包裝建構函數取代window.ResizeObserver記下所建立之實例，結束(含拋錯)即還原，呼叫端於圖表銷毀時對所收集之實例disconnect；
+無ResizeObserver(例如伺服器端或舊瀏覽器)時直接執行fn，Highcharts改以window resize事件並於destroy時解除，無需處理</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="trackResizeObserver.mjs.html">trackResizeObserver.mjs</a>, <a href="trackResizeObserver.mjs.html#line14">line 14</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>fn</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">function</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>輸入同步執行之函數(例如建立Highcharts圖表)</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>list</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Array</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>輸入收集用陣列，建立之ResizeObserver實例會被push進去</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳fn之回傳值</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">*</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
     
 
     
@@ -1171,7 +1545,7 @@ console.log(isPropUnchanged(o, o))
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sat Oct 31 2026 17:58:49 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Nov 01 2026 11:48:02 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>

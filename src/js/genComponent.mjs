@@ -3,6 +3,8 @@ import isPropUnchanged from './isPropUnchanged.mjs'
 import getChartOptInfo from './getChartOptInfo.mjs'
 import cloneOptNoReflow from './cloneOptNoReflow.mjs'
 import getContainerSize from './getContainerSize.mjs'
+import getUpdateMode from './getUpdateMode.mjs'
+import trackResizeObserver from './trackResizeObserver.mjs'
 
 
 //ctors, 組件名稱對應之Highcharts建構函數名稱
@@ -17,8 +19,36 @@ let ctors = {
 /**
  * 產生Highcharts繪圖組件(Vue2)，取代vue-highcharts之genComponent
  *
- * vue-highcharts於options任一變更(含模板物件字面值每次重繪、資料點異動)皆重建整張圖，致圖例隱藏等使用者狀態遺失，且Highcharts每建一圖即新增一個不解除之ResizeObserver而隨更新累積；
- * 本組件掛載時建立一次圖表，options變更以chart.update就地更新(內容相同之新物件不更新)，銷毀時destroy
+ * options變更時之更新方式由prop updateMode決定：
+ * 'rebuild'(預設)：options變更即銷毀並重建整張圖(同vue-highcharts與本套件1.0.18之行為)，同一份設定恆畫出同一張圖，不受先前設定與使用者操作影響；縮放、導覽列範圍、圖例顯隱、點選取、tooltip等互動狀態隨之重置；
+ * 'update'：以chart.update(options, true, true)就地更新，保留縮放、導覽列範圍、圖例隱藏，但Highcharts之update與新建並不等價，結果可能與新建不同(見下列〈chart.update之已知狀況與問題〉)，不保證等同重建；
+ * 兩種模式皆為：內容相同之新物件(例如模板物件字面值於每次重繪產生者)不視為變更；掛載時建立圖表，銷毀時destroy
+ *
+ * 為何預設重建(1.0.23~1.0.29曾改為預設就地更新，其後恢復)：
+ * 就地更新使「同一份設定畫出之圖」隨圖先前之設定與操作而異，下游e2e標準圖與規格(同設定同圖)因此失效(Gitea #33)；其中一類差異(下列第2點)出自Highcharts自身，無任何選項層之補丁能消除，只有重建能與新建等同；
+ * 重建亦不慢於就地更新(實測5系列×2000點，Highcharts每次約26ms對45ms)；就地更新所保留之互動狀態僅縮放、導覽列範圍、圖例隱藏三類，點選取與tooltip懸停反正不保留；
+ * 需保留該三類互動狀態者(例如資料持續推播而使用者正在檢視縮放範圍)可自行給updateMode為'update'，並自行承擔下列差異
+ *
+ * 〈chart.update之已知狀況與問題〉(Highcharts 11.4.8實測；行號為node_modules/highcharts/highstock.src.js，核心區段與highcharts.src.js相同；重現證據見sgud/exp/experience.md)：
+ * 1. 合併而非取代：Chart.update先diffObjects(新設定, chart.options)(:37593)，再merge進userOptions(:37594)，軸為Axis.update之merge(this.userOptions, options)(:21392，原碼JSDoc :21373-21374明寫only new or altered options need to be specified)；
+ *    新設定省略之鍵(min、max、tickInterval、tickAmount、softMax、marginLeft、plotLines…)沿用舊值，只有顯式undefined可覆寫(:412-414)，預設值非undefined之鍵(例如lineWidth)連此法也無法還原；
+ *    後果：設定A有yAxis.max為3、設定B省略，更新後軸上限仍為3(w-geo-vue切換參數時同一圖元件被餵入不同設定即屬此類)；官方issue #14969亦答覆不合併之更新唯一做法是重建
+ * 2. 刻度間隔可能與新建不同：新建由Chart.render(:36979-37054)以扣除x軸標籤預留空間後之縮減軸長首算刻度，更新由Chart.redraw(:35779、setScale :35848-35851)以保留之最終軸長(len屬Axis.keepProps，:21472-21481)計算；
+ *    與設定內容無關，連只改系列名稱或只改資料都可能發生，此為Highcharts自身之update與new不等價，無選項層修法；後果：同設定同尺寸下y軸刻度間隔與範圍不同(實測±200/間距100對±150/間距50)
+ * 3. Axis.keepProps殘留使用者範圍：userMin、userMax、len等於更新後保留(:21472-21481)，且hardMin = pick(axis.userMin, options.min)(:19520)使userMin優先於新設定之min；Highstock之navigator於資料更新時亦會寫入baseXAxis.userMin/userMax(:50014-50018)；
+ *    後果：使用者縮放過後，新設定明確給的xAxis.min、max仍被舊縮放範圍蓋過
+ * 4. Highstock開navigator時強制之startOnTick、endOnTick為false(getForcedAxisOptions :53535-53551)及Stock預設值(:53596-53630)只在建圖(StockChart.init :53640)與createAxis(:53660)時套用，更新不重套；
+ *    使用端設定帶startOnTick為true者，因diffObjects把true與chart.options內被強制之false視為變更而套用true，第一次更新(即使只差資料)即失效；後果：拖導覽列把手與滾輪縮放之起迄被捨入至刻度，不能選取精確時間
+ * 5. navigator、scrollbar開關切換：Navigator.update(:49042-49053)關閉時不移除chart.navigator與chart.scrollbar，其getMargins監聽(:50097-50108)恆加navigator.margin(25)，繪圖區變矮、刻度改變；
+ *    無navigator建圖後更新為啟用則chart.navigator為null，導覽列根本不出現(marginBottom卻已加大)
+ * 6. 格線群組排到圖框之後：Axis.update銷毀並重建格線群組(:21223-21230、:20722-20736)，zIndex(皆為1)相同時插在既有元素之後(:11056-11064)，圖框於drawChartBox(:36846-36853)以zIndex為1建立，新建時先於格線群組；
+ *    每一次chart.update皆發生，與設定內容無關(含僅改資料)；後果：淡色格線蓋在plotBorderColor之圖框上，圖框上緣與右緣由深色變淺色
+ * 7. 互動狀態：保留縮放(含框選縮放與重設縮放按鈕)、navigator範圍、圖例隱藏；不保留點選取(allowPointSelect)，tooltip懸停之hoverPoint遺失而tooltip殘留舊內容
+ * 另Series.update之preserve清單與keepPoints條件、系列型別切換、responsive.rules切換等亦各有update與new不等價之處，詳見sgud/exp/experience.md
+ *
+ * ResizeObserver：Highcharts每建一圖(onload的Chart.setReflow，:36551-36559、:37262)即無條件以全域ResizeObserver新增一個偵測容器之偵測器，無解除機制，不論chart.reflow是否為false；
+ * 其回呼閉包持有圖物件，反覆重建時已destroy之圖殼物件隨次數累積(實測重建30次後存活Chart物件32個)；本組件以trackResizeObserver於建圖期間捕捉該偵測器，於下次重建前與組件銷毀時disconnect，存活圖物件不隨重建次數增長(捕捉後為2個)；
+ * 本組件恆給chart.reflow為false並自行以v-domresize同步尺寸，故該偵測器之回呼本來就什麼都不做，disconnect不影響行為
  *
  * 容器尺寸同步：以w-component-vue之v-domresize(wsemi domDetect，ResizeObserver，並處理元素消失與重建)偵測，以與Highcharts相同之方式量測容器並與圖表目前尺寸比較，不一致時於繪製前同步圖表尺寸，取代Highcharts內建reflow(防抖100ms，連續拖拉時不跟隨)；
  * 容器隱藏(寬或高為0)或尺寸與圖表一致時不重繪，options.chart.reflow給false則不同步，options.chart.width、height有給者該維度固定
@@ -50,6 +80,10 @@ function genComponent(name, Highcharts) {
                 type: Object,
                 default: () => ({}),
             },
+            //updateMode不宣告type: 非字串或未知字串依getUpdateMode視為未給、改用預設'rebuild', 不使Vue對非預期輸入報警
+            updateMode: {
+                default: 'rebuild',
+            },
         },
         data: function() {
             //resizeOpt為v-domresize之設定, 圖表建立後給予, reflow給false時為false(不建立偵測器)
@@ -80,14 +114,27 @@ function genComponent(name, Highcharts) {
                         return
                     }
 
-                    //check
-                    if (!vo.chart) {
+                    //check, 尚未掛載或已銷毀時不處理
+                    if (!vo.isLive) {
                         return
                     }
 
-                    //update, 就地更新以保留使用者互動狀態, oneToOne使series等依新設定增刪
-                    vo.chartInfo = getChartOptInfo(nv)
-                    vo.chart.update(cloneOptNoReflow(nv), true, true)
+                    //updateMode, 非'update'者(含非預期輸入)一律重建
+                    if (getUpdateMode(vo.updateMode) === 'update' && vo.chart) {
+
+                        //update, 就地更新以保留縮放、導覽列範圍、圖例顯隱, oneToOne使series等依新設定增刪;
+                        //此為合併而非取代, 結果不保證等同重建, 已知差異見本檔上方〈chart.update之已知狀況與問題〉
+                        vo.chartInfo = getChartOptInfo(nv)
+                        vo.chart.update(cloneOptNoReflow(nv), true, true)
+
+                    }
+                    else {
+
+                        //rebuild, 預設, 銷毀後以新設定重建, 使同一份設定恆畫出同一張圖(update與新建不等價之理由見本檔上方);
+                        //destroy與ctor於同一tick內同步完成, 不會被繪製出空白容器; 先前建圖失敗致vo.chart為null時亦走此路徑重建而恢復
+                        vo.rebuild(nv)
+
+                    }
 
                     //resizeOpt, 以新refreshKey更換使v-domresize重新比較(例如移除固定寬度), 恢復或停用reflow時隨之重建或解除偵測器
                     vo.resizeOpt = vo.genResizeOpt()
@@ -100,12 +147,87 @@ function genComponent(name, Highcharts) {
             init: function() {
                 let vo = this
 
+                //isLive, 掛載後為true, 銷毀後為false
+                vo.isLive = true
+
                 //chartInfo, chart, 掛this成非響應式屬性
-                vo.chartInfo = getChartOptInfo(vo.options)
-                vo.chart = ctor(vo.$el, cloneOptNoReflow(vo.options))
+                vo.createChart(vo.options)
 
                 //resizeOpt
                 vo.resizeOpt = vo.genResizeOpt()
+
+            },
+
+            /**
+             * 建立圖表並捕捉Highcharts於建圖時建立之ResizeObserver(內部使用)
+             *
+             * 捕捉理由見本檔上方〈ResizeObserver〉; 若圖表含需非同步載入之圖片(建構函數回傳時chart.hasLoaded尚未為true, onload前為undefined), Highcharts於載入完成後才呼叫setReflow,
+             * 故於該圖實例上包裝setReflow, 使其建立之偵測器同樣被收集
+             */
+            createChart: function(opt) {
+                let vo = this
+
+                //ros, 本圖表所建立之ResizeObserver實例
+                let ros = []
+                vo.chartRos = ros
+
+                //chartInfo, chart, 建構函數拋錯時vo.chart為null
+                vo.chartInfo = getChartOptInfo(opt)
+                vo.chart = null
+                let chart = trackResizeObserver(() => {
+                    return ctor(vo.$el, cloneOptNoReflow(opt))
+                }, ros)
+                vo.chart = chart
+
+                //圖片非同步載入, 於載入完成時(setReflow被呼叫)同樣捕捉
+                if (chart && !chart.hasLoaded && typeof chart.setReflow === 'function') {
+                    let setReflow = chart.setReflow
+                    chart.setReflow = function() {
+                        return trackResizeObserver(() => {
+                            return setReflow.call(chart)
+                        }, ros)
+                    }
+                }
+
+            },
+
+            /**
+             * 以新設定重建圖表(內部使用), 先釋放舊圖表再建立, 建立拋錯時vo.chart為null
+             */
+            rebuild: function(opt) {
+                let vo = this
+                vo.releaseChart()
+                vo.createChart(opt)
+            },
+
+            /**
+             * 釋放圖表(內部使用): 取消尚未執行之尺寸同步, disconnect捕捉到之ResizeObserver, 銷毀圖表
+             */
+            releaseChart: function() {
+                let vo = this
+
+                //sizeFrame
+                if (vo.sizeFrame) {
+                    window.cancelAnimationFrame(vo.sizeFrame)
+                    vo.sizeFrame = null
+                }
+
+                //ros, 先disconnect再destroy
+                let ros = vo.chartRos || []
+                vo.chartRos = null
+                ros.forEach((ro) => {
+                    try {
+                        ro.disconnect()
+                    }
+                    catch (err) {}
+                })
+
+                //chart, 容器尺寸監聽由v-domresize隨組件解除
+                let chart = vo.chart
+                vo.chart = null
+                if (chart) {
+                    chart.destroy()
+                }
 
             },
 
@@ -181,17 +303,11 @@ function genComponent(name, Highcharts) {
             clear: function() {
                 let vo = this
 
-                //sizeFrame
-                if (vo.sizeFrame) {
-                    window.cancelAnimationFrame(vo.sizeFrame)
-                    vo.sizeFrame = null
-                }
+                //isLive
+                vo.isLive = false
 
-                //chart, 容器尺寸監聽由v-domresize隨組件解除
-                if (vo.chart) {
-                    vo.chart.destroy()
-                    vo.chart = null
-                }
+                //sizeFrame, ResizeObserver, chart
+                vo.releaseChart()
 
             },
 

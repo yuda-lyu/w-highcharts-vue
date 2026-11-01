@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>w-highcharts-vue e2e host</title>
+<style>body{margin:0;background:#fff;font-family:sans-serif}</style>
+<!-- 宿主頁: 扮演父層頁面, 以編譯後之元件(/bundle/)執行; /node_modules/僅供應vue -->
+<script src="/node_modules/vue/dist/vue.js"></script>
+<script src="/bundle/w-highcharts-vue.umd.js"></script>
+<script>Vue.config.productionTip = false; Vue.config.devtools = false; Vue.use(window['w-highcharts-vue'])</script>
+<script src="/host/lib.js"></script>
+<script src="/host/scen.js"></script>
+<script src="/host/geo.js"></script>
+</head>
+<body></body>
+</html>
