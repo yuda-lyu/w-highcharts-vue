@@ -70,7 +70,7 @@ Add script for vue.
 
 Add script for w-highcharts-vue.
 ```alias
-<script src="https://cdn.jsdelivr.net/npm/w-highcharts-vue@1.0.31/dist/w-highcharts-vue.umd.js"></script>
+<script src="https://yuda-lyu.github.io/w-highcharts-vue/dist/w-highcharts-vue.umd.js"></script>
 ```
 
 Directly use:
