@@ -3,10 +3,12 @@
 import launchBrowser from 'w-package-tools-e2e/src/launchBrowser.mjs'
 import pollUntil from 'w-package-tools-e2e/src/pollUntil.mjs'
 import assertBaselineMatch from 'w-package-tools-e2e/src/assertBaselineMatch.mjs'
+import reserveE2ePorts from 'w-package-tools-e2e/src/reserveE2ePorts.mjs'
 
 
 export {
     launchBrowser,
     pollUntil,
-    assertBaselineMatch
+    assertBaselineMatch,
+    reserveE2ePorts
 }

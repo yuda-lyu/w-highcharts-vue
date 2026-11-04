@@ -1,5 +1,5 @@
 //e2e-setup: e2e測試之專案組態與專案專屬原語, 共用實作經./e2eLib.mjs單一橋接
-//- 每個測試檔為一個流程, 各自以固定port之本機靜態站與test/_tmp/<流程代號>/之編譯目錄執行, 供mocha --parallel並行
+//- 每個測試檔為一個流程, 各自以基準port(固定, 見./e2ePorts.mjs; 被占用時自動換埠)之本機靜態站與test/_tmp/<流程代號>/之編譯目錄執行, 供mocha --parallel並行
 //- 元件由現行src以rollup編譯(與toolg/gDistRollupComps.mjs同設定), 預設不依賴./dist; 環境變數E2E_SRC_DIR可改指他版src/components(含WHighchartsVueAll.vue)供紅燈驗證與變異驗證,
 //  環境變數E2E_DIST_DIR可改指現成dist資料夾(含w-highcharts-vue.umd.js, 不編譯)供驗證dist
 //- 宿主頁test/host/index.html扮演父層頁面; 父層改變options prop屬setup(父層行為), 使用者互動(拖導覽列把手、滾輪、點圖例)一律由測試以真滑鼠進行
@@ -9,6 +9,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import rollupFiles from 'w-package-tools/src/rollupFiles.mjs'
 import { launchBrowser, pollUntil, assertBaselineMatch } from './e2eLib.mjs'
+import { FLOW_PORTS, reserveBasePort, listenWithReselect } from './e2ePorts.mjs'
 
 
 let projRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..') //本模組位於test/tools, 上兩層為專案根
@@ -17,14 +18,7 @@ let fdTmpRoot = path.join(testDir, '_tmp')
 let fdHost = path.join(testDir, 'host')
 
 
-//FLOW_PORTS, 流程代號與其靜態站port(≥8000、固定不隨機、與sgud/rule/rulebook.md之e2e映射一致)
-let FLOW_PORTS = {
-    'update-vs-fresh': 8301,
-    'navigator': 8302,
-    'rebuild-resource': 8303,
-    'update-mode': 8304,
-    'geo-like': 8305,
-}
+//FLOW_PORTS(各流程靜態站之基準port, ≥8000、固定不隨機、與sgud/rule/rulebook.md之e2e映射一致)定義於./e2ePorts.mjs; 被占用時自動換埠, 實際port於createFlow之setup確定
 
 
 //SCEN_IDS, 宿主頁test/host/scen.js之場景id全集(順序同檔; 有一致性案例比對, 增減場景時須同步)
@@ -148,7 +142,11 @@ function startServer(port, fdDist) {
     })
     return new Promise((resolve, reject) => {
         server.once('error', (err) => {
-            reject(new Error(`無法於127.0.0.1:${port}啟動測試站(${err.code}), 該port為本專案固定配發(sgud/rule/rulebook.md), 請確認未被其他程式佔用`))
+            //保留err.code供listenWithReselect辨識EADDRINUSE(被占用時換埠重試, 不殺占用者)
+            let e = new Error(`無法於127.0.0.1:${port}啟動測試站(${err.code}${err.code === 'EADDRINUSE' ? ': 該port已被占用, 不下殺占用者, 由listenWithReselect換埠重試' : ''})`)
+            e.code = err.code
+            e.cause = err
+            reject(e)
         })
         server.listen(port, '127.0.0.1', () => {
             resolve(server)
@@ -167,23 +165,38 @@ function removeFlowDir(fdFlow) {
 }
 
 
-//createFlow, 建立一個流程之執行環境: setup於mocha之before(編譯並啟動靜態站), teardown於after(關站並刪除中介資料)
-function createFlow(flow) {
-    let port = FLOW_PORTS[flow]
-    if (!port) {
+//createFlow, 建立一個流程之執行環境: setup於mocha之before(編譯並啟動靜態站), teardown於after(關站、釋放port保留並刪除中介資料)
+//- 靜態站port: 基準port(FLOW_PORTS)被占用(含其他套件之e2e同時在跑)時自動換埠(reserveBasePort), 不殺占用者; origin由實際port衍生, 於setup確定
+//- inj僅供單元測試注入(unit-e2ePortReserve): inj.port覆寫基準port, inj.fdDist指定現成dist(不編譯), inj.reserve為reserveE2ePorts選項(如regDir)
+function createFlow(flow, inj = {}) {
+    let base = inj.port || FLOW_PORTS[flow]
+    if (!base) {
         throw new Error(`未登錄之流程代號: ${flow}`)
     }
-    let origin = `http://127.0.0.1:${port}`
+    let origin = null //實際port(可能因被占用而位移)於setup綁定後才確定
     let fdFlow = path.join(fdTmpRoot, flow)
     let fdDist = path.join(fdFlow, 'dist')
     let server = null
+    let reservation = null
 
     let setup = async () => {
-        let fdDistGiven = getDistDir()
+        let fdDistGiven = inj.fdDist || getDistDir()
         if (!fdDistGiven) {
             await buildComponent(fdDist)
         }
-        server = await startServer(port, fdDistGiven || fdDist)
+        //編譯後才取保留並立即綁定(縮短偵測與綁定之間隔); 綁定遇EADDRINUSE則重選
+        reservation = reserveBasePort(base, inj.reserve)
+        try {
+            let r = await listenWithReselect(reservation, base, (port) => startServer(port, fdDistGiven || fdDist))
+            server = r.value
+            origin = `http://127.0.0.1:${r.port}`
+        }
+        catch (err) {
+            reservation.release()
+            reservation = null
+            throw err
+        }
+        console.log(`[e2e-port] 流程 ${flow} 測試站 ${origin}${origin.endsWith(`:${base}`) ? '(基準埠)' : `(基準埠 ${base})`}`)
     }
 
     let teardown = async () => {
@@ -191,11 +204,19 @@ function createFlow(flow) {
             await new Promise((resolve) => server.close(() => resolve()))
             server = null
         }
+        if (reservation) {
+            reservation.release()
+            reservation = null
+        }
+        origin = null
         removeFlowDir(fdFlow)
     }
 
     //openCase, 每case全新context開啟宿主頁: 阻擋並記錄所有非本機請求(測試不得依賴外網); 收集主控台錯誤與pageerror
     let openCase = async (browser, opt = {}) => {
+        if (!origin) {
+            throw new Error(`流程 ${flow} 尚未setup(測試站未啟動)`)
+        }
         let context = await browser.newContext({ viewport: { width: opt.width || 900, height: opt.height || 700 } })
         let external = []
         await context.route('**/*', (route) => {
@@ -232,7 +253,7 @@ function createFlow(flow) {
         return path.join(fdFlow, name)
     }
 
-    return { setup, teardown, openCase, pathTmp, origin }
+    return { setup, teardown, openCase, pathTmp, get origin() { return origin } }
 }
 
 

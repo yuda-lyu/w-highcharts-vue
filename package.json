@@ -1,6 +1,6 @@
 {
   "name": "w-highcharts-vue",
-  "version": "1.0.35",
+  "version": "1.0.36",
   "main": "dist/w-highcharts-vue.umd.js",
   "dependencies": {
     "highcharts": "^11.4.8",
@@ -21,7 +21,7 @@
     "eslint-plugin-vue": "^9.10.0",
     "vue": "^2.7.16",
     "w-package-tools": "^1.1.23",
-    "w-package-tools-e2e": "^1.0.20"
+    "w-package-tools-e2e": "^1.0.22"
   },
   "scripts": {
     "serve": "vue-cli-service serve",
