@@ -1,4 +1,4 @@
-//e2e-geo-like: 使用端確認——w-geo-vue之WSptLiqPlotDepth(液化分析頁深度剖線圖)型設定(Gitea #33, 建議檔〈緣由〉frliq液化分析頁E2E-011~015、019)
+//e2e-geo-like: 使用端確認——w-geo-vue之WSptLiqPlotDepth(液化分析頁深度剖線圖)型設定(Gitea #33, 建議檔〈緣由〉使用端液化分析頁E2E-011~015、019)
 //重現: 使用者切換參數(FS圖yAxis.max為3換為其他參數之圖無max)、寬高滑桿、繪圖型態、隱藏深度軸標題、深度範圍改變; 每次重算options皆含新函數(labels.formatter), 故每次皆視為已變更;
 //w-geo-vue以索引為key重用圖元件(WSptLiqPlotDepths.vue :key="'kst-'+kst"), 同一圖元件依序被餵入不同參數之設定
 //設定形狀見test/host/geo.js(取自w-geo-vue只讀參照, 未修改該套件); 預設模式下每次改設定後之圖須與直接以該設定新建者相同(語意快照、像素、框線不被格線蓋住、無殘留max為3)

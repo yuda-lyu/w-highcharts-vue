@@ -25,7 +25,7 @@
 ## 已知缺口與待辦
 
 - 版本號與發布:未改版(`package.json` version 1.0.29),由主控發布;破壞性變更紀錄:預設由就地更新改回重建(1.0.23~1.0.29 之行為承諾「保留圖例顯隱、縮放等使用者狀態」作廢,需要者改給`updateMode="update"`),取用`$refs.xxx.chart`者須每次取最新(重建會更換圖表實例)
-- 使用端 frliq 需重建 dist 並重跑其 e2e 以確認 12 案回到標準圖(未在 frliq 實測;本套件以 w-geo-vue 型設定 8 場景證明)
+- 使用端使用端需重建 dist 並重跑其 e2e 以確認 12 案回到標準圖(未在使用端實測;本套件以 w-geo-vue 型設定 8 場景證明)
 - 「僅資料改變就地更新、其餘重建」之混合模式(第三種`updateMode`)、「重建後還原互動狀態」(方案④)均未做(hc33 調研列為可選,使用者未裁示)
 - 未測:容器`display:none`時建圖、Highmaps/Gantt、Highcharts 11.4.8 與 Chromium 1243 以外之組合;`responsive.rules`切換
 - `package.json`新增 devDependency `w-package-tools-e2e ^1.0.14`(供真瀏覽器 e2e;npm install 順帶使`package-lock.json`大幅增加,並使`package.json`末尾多一換行)
