@@ -1,12 +1,12 @@
 {
   "name": "w-highcharts-vue",
-  "version": "1.0.65",
+  "version": "1.0.66",
   "main": "dist/w-highcharts-vue.umd.js",
   "dependencies": {
     "highcharts": "^11.4.8",
-    "w-component-vue": "^2.5.74",
-    "w-highcharts": "^1.0.61",
-    "wsemi": "^1.9.78"
+    "w-component-vue": "^2.5.75",
+    "w-highcharts": "^1.0.62",
+    "wsemi": "^1.9.79"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "^5.0.8",
@@ -21,7 +21,7 @@
     "eslint-plugin-vue": "^9.10.0",
     "vue": "^2.7.16",
     "w-package-tools": "^1.1.31",
-    "w-package-tools-e2e": "^1.0.55"
+    "w-package-tools-e2e": "^1.0.56"
   },
   "scripts": {
     "serve": "vue-cli-service serve",
